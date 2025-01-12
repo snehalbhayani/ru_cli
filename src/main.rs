@@ -1,51 +1,54 @@
-use std::fs;
-use std::path::Path;
+use blake3::{hash, Hash};
 use std::collections::HashMap;
-use clap::Parser;
+use std::collections::HashSet;
+use std::io::{self, Write};
 
-/// CLI Tool: Organize files in a directory by extension
-#[derive(Parser)]
-#[command(version = "1.0", author = "Your Name", about = "Organizes files by extension")]
-struct Args {
-    /// Directory to organize
-    #[arg(short, long)]
-    dir: String,
+fn handle_exit(s: &str) -> bool {
+    if s.eq_ignore_ascii_case("exit") {
+        println!("Exiting...");
+        return true;
+    } else {
+        return false;
+    }
+}
+
+fn tokenize_and_index(input: &str, history: &mut HashMap<String, HashSet<String>>) {
+    for i in 1..=input.len() {
+        // Iterate over slice lengths
+        let slice = &input[0..i];
+        println!("{}", slice);
+        let curr_val = history.entry(slice.to_string()).or_insert(HashSet::new());
+        curr_val.insert(input.to_string());
+    }
+}
+
+fn handle_tab(input: &str) {
+    // We need to handle tab and display the matching list of commands from the history
 }
 
 fn main() {
-    let args = Args::parse();
-    let dir_path = Path::new(&args.dir);
+    // We need two main types of memory. One is the heap which holds the history
+    let mut buffer: String = String::new(); // Holds current input
+    let mut history: HashMap<String, HashSet<String>> = HashMap::new(); // Stores tokenized lines
 
-    if !dir_path.exists() {
-        eprintln!("Error: Directory does not exist!");
-        return;
-    }
+    loop {
+        print!("> ");
+        io::stdout().flush().unwrap(); // Flush stdout to display prompt immediately
 
-    // Create a hashmap to store file extensions and their target folders
-    let mut extension_map: HashMap<&str, &str> = HashMap::new();
-    extension_map.insert("jpg", "Images");
-    extension_map.insert("png", "Images");
-    extension_map.insert("txt", "Documents");
-    extension_map.insert("pdf", "Documents");
-    extension_map.insert("mp4", "Videos");
+        buffer.clear(); // Clear buffer for new input
+        io::stdin()
+            .read_line(&mut buffer)
+            .expect("Failed to read line");
 
-    // Iterate through files in the directory
-    for entry in fs::read_dir(dir_path).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
+        let input: String = buffer.trim().to_string(); // Remove trailing newline
 
-        if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
-            if let Some(target_folder) = extension_map.get(extension) {
-                let target_path = dir_path.join(target_folder);
-
-                // Create folder if it doesn't exist
-                fs::create_dir_all(&target_path).unwrap();
-
-                // Move file
-                let new_path = target_path.join(path.file_name().unwrap());
-                fs::rename(&path, &new_path).unwrap();
-                println!("Moved: {} -> {:?}", path.display(), new_path);
-            }
+        if handle_exit(&input) {
+            break;
         }
+        tokenize_and_index(&input, &mut history);
+    }
+    for key in history.keys() {
+        println!("key: {:?}", key);
+        println!("val: {:?}", history.get(key));
     }
 }
