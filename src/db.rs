@@ -21,7 +21,7 @@ pub fn setup_db() -> Connection {
         "CREATE TABLE IF NOT EXISTS history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             command TEXT NOT NULL,
-            timestamp INTEGER NOT NULL
+            timestamp INTEGER NOT NULL, frequency INTEGER NOT NULL
         )",
         [],
     ).unwrap();
@@ -29,11 +29,22 @@ pub fn setup_db() -> Connection {
     conn
 }
 
-pub fn insert_command(conn: &Connection, command: &str) {
-    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+pub fn insert_command(conn: &Connection, command: &str, frequency:i32) {
+    let timestamp: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
     conn.execute(
-        "INSERT INTO history (command, timestamp) VALUES (?1, ?2)",
-        params![command, timestamp],
+        "INSERT INTO history (command, timestamp, frequency) VALUES (?1, ?2, ?3)",
+        params![command, timestamp, frequency],
+    ).unwrap();
+}
+
+pub fn update_command(conn: &Connection, command: &str, frequency:i32) {
+    // Update the command history by searching based on command
+    let timestamp: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    conn.execute(
+        "INSERT INTO history (command, timestamp, frequency) VALUES (?1, ?2, ?3)",
+        params![command, timestamp, frequency],
     ).unwrap();
 }
 
