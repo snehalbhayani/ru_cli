@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use clap::builder::ValueParserFactory;
 use rusqlite::{params, Connection};
 use tch::{nn::{self, Module, OptimizerConfig, RNN, LSTMState}, Device, Tensor};
-const SEQ_LEN: usize = 10; // Fixed sequence length
+const SEQ_LEN: usize = 3; // Fixed sequence length
 
 // 1️⃣ Load commands from SQLite
 pub fn load_commands(db_path: &str) -> Vec<String> {
     let conn = Connection::open(db_path).expect("Failed to open DB");
-    let mut stmt = conn.prepare("SELECT command FROM commands LIMIT 500").expect("Failed to prepare query");
+    let mut stmt = conn.prepare("SELECT command FROM history").expect("Failed to prepare query");
     let rows = stmt
         .query_map([], |row| row.get(0))
         .expect("Failed to execute query");
@@ -93,57 +94,97 @@ impl LSTMModel {
 // 5️⃣ Training Function
 pub fn  train_model(num_epochs: usize, batch_size: i64, hidden_size:i64, char_to_idx: &HashMap<char, i64>, idx_to_char:&HashMap<i64, char>, commands: Vec<String>)->LSTMModel {
     let device = Device::cuda_if_available();
-    let vs = nn::VarStore::new(device);
-
-
+    let mut vs = nn::VarStore::new(device);
+    
     let vocab_size = char_to_idx.len() as i64;
+    let model: LSTMModel = LSTMModel::new(&vs.root(), vocab_size, 16, hidden_size, 1);
+    let model_loaded =  vs.load("my_cli/model.safetensors");
 
-    let (train_data, target_data) = create_sequences(&commands, &char_to_idx);
-    println!("{:?} sequences creaed", train_data.size());
-    let train_data = train_data.to_device(device);
-    let target_data = target_data.to_device(device);
-
-    let model = LSTMModel::new(&vs.root(), vocab_size, 16, hidden_size, 1);
-    let mut opt = nn::Adam::default().build(&vs, 0.01).unwrap();
-    // let criterion = nn::CrossEntropyLoss::new();
-
-    let num_batches = train_data.size()[0] / batch_size;
-
-    for epoch in 1..=num_epochs {
-        let mut total_loss = 0.0;
-
-        for i in 0..num_batches {
-            let start = i * batch_size;
-            let end = start + batch_size;
-
-            let input_batch = train_data.narrow(0, start, batch_size).to_device(device);
-            let target_batch = target_data.narrow(0, start, batch_size).to_device(device);
-
-            let h = Tensor::zeros(&[1, batch_size, hidden_size], (tch::Kind::Float, device));
-            let c = Tensor::zeros(&[1, batch_size, hidden_size], (tch::Kind::Float, device));
-
-            opt.zero_grad();
-            let (logits, _) = model.forward(&input_batch, h, c);
-            let loss = logits.view([-1, vocab_size]).cross_entropy_for_logits(&target_batch.view([-1]));
-            loss.backward();
-            opt.step();
-
-            total_loss += loss.double_value(&[]);
-        }
+    if let Ok(_) = model_loaded {
+        // println!("Model loaded successfully...");
+        // let vocab_size = char_to_idx.len() as i64;
+        // for (name, value) in vs.variables() {
+        //     if name == "weight" {
+        //     value.get(0).get(10).print();
+        //     }
+        // }
         
-        if epoch % 10 == 0 {
-            println!("Epoch {}/{}, Loss: {:.4}", epoch, num_epochs, (total_loss / num_batches as f64) / batch_size as f64);
-            let start_seq = "is not her";
-            let predicted_text = generate_text(&model, &start_seq, char_to_idx, idx_to_char, 1 as usize, 128);
-            println!("{:?}", predicted_text);
-        
+
+        model
+    } else{
+        // println!("Training from scratch...");
+        let vocab_size = char_to_idx.len() as i64;
+
+        let (train_data, target_data) = create_sequences(&commands, &char_to_idx);
+        // println!("{:?} sequences creaed", train_data.size());
+        let train_data = train_data.to_device(device);
+        let target_data = target_data.to_device(device);
+    
+        let model: LSTMModel = LSTMModel::new(&vs.root(), vocab_size, 16, hidden_size, 1);
+        let mut opt = nn::Adam::default().build(&vs, 0.01).unwrap();
+        let num_batches = train_data.size()[0] / batch_size;
+    
+        for epoch in 1..=num_epochs {
+            let mut total_loss = 0.0;
+    
+            for i in 0..num_batches {
+                let start = i * batch_size;
+                let end = start + batch_size;
+    
+                let input_batch = train_data.narrow(0, start, batch_size).to_device(device);
+                let target_batch = target_data.narrow(0, start, batch_size).to_device(device);
+    
+                let h = Tensor::zeros(&[1, batch_size, hidden_size], (tch::Kind::Float, device));
+                let c = Tensor::zeros(&[1, batch_size, hidden_size], (tch::Kind::Float, device));
+    
+                opt.zero_grad();
+                let (logits, _) = model.forward(&input_batch, h, c);
+                let loss = logits.view([-1, vocab_size]).cross_entropy_for_logits(&target_batch.view([-1]));
+                loss.backward();
+                opt.step();
+    
+                total_loss += loss.double_value(&[]);
+            }
+            
+            if epoch % 10 == 0 {
+                // println!("Epoch {}/{}, Loss: {:.4}", epoch, num_epochs, (total_loss / num_batches as f64) / batch_size as f64);
+                // let start_seq = "oo2";
+                // let predicted_text = generate_text(&model, &start_seq, char_to_idx, idx_to_char, 1 as usize, hidden_size);
+                // println!("{:?}", predicted_text);
+            
+            }
         }
+
+        
+    //     for (name, value) in vs.variables() {
+    //         if name == "weight" {
+    //            value.get(0).get(10).print();
+    //         }
+    //    }
+       vs.save("my_cli/model.safetensors").unwrap();
+
+    //    let mut vs1 = nn::VarStore::new(device);
+    //    let vocab_size = char_to_idx.len() as i64;
+    //    let model1: LSTMModel = LSTMModel::new(&vs1.root(), vocab_size, 16, hidden_size, 1);
+    //    for (name, value) in vs1.variables() {
+    //         if name == "weight" {
+    //         value.get(0).get(10).print();
+    //         }
+    //    }
+
+    //     let model_loaded =  vs1.load("my_cli/model.safetensors").unwrap();
+    //     for (name, value) in vs1.variables() {
+    //             if name == "weight" {
+    //             value.get(0).get(10).print();
+    //             }
+    //     }
+        model
+
     }
-    model
+
 
 }
 
-// 6️⃣ Text Generation Function
 pub fn generate_text(model: &LSTMModel, start_seq: &str, char_to_idx: &HashMap<char, i64>, idx_to_char: &HashMap<i64, char>, length: usize, hidden_size:i64) -> String {
     let device = Device::cuda_if_available();
     let mut generated = start_seq.to_string();
@@ -151,6 +192,7 @@ pub fn generate_text(model: &LSTMModel, start_seq: &str, char_to_idx: &HashMap<c
     let mut input_tensor = Tensor::from_slice(
         &start_seq.chars().filter_map(|c| char_to_idx.get(&c).copied()).collect::<Vec<i64>>()
     ).view([1, SEQ_LEN as i64]).to_device(device);
+    
     let mut h = Tensor::zeros(&[1, 1, hidden_size], (tch::Kind::Float, device));
     let mut c = Tensor::zeros(&[1, 1, hidden_size], (tch::Kind::Float, device));
 
@@ -158,6 +200,7 @@ pub fn generate_text(model: &LSTMModel, start_seq: &str, char_to_idx: &HashMap<c
         let (logits, state_new) = model.forward(&input_tensor, h, c);
         h = state_new.h();
         c = state_new.c();
+        logits.print();
         let next_idx = logits
             .softmax(-1, tch::Kind::Float)
             .argmax(-1, false).get(0).get(2).int64_value(&[]);

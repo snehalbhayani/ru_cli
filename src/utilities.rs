@@ -12,15 +12,7 @@ use tch::{Device, Kind, Tensor};
 use crate::db;
 
 pub fn char_to_index(c: char, vocab:Vec<char>) -> Option<usize> {
-    // if c.is_ascii_alphabetic() {
-    //     // Normalize to lowercase and map 'a' to 0, 'b' to 1, ..., 'z' to 25.
-    //     Some(c.to_ascii_lowercase() as usize - 'a' as usize)
-    // } else if c.is_ascii_digit() {
-    //     // Map '0' to 26, '1' to 27, ..., '9' to 35.
-    //     Some(26 + (c as usize - '0' as usize))
-    // } else {
-    //     None
-    // }
+
     if let Some(index) = vocab.iter().position(|&vc| vc == c) {
         Some(index)
     } else {
