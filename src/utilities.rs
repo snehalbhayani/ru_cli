@@ -71,10 +71,3 @@ pub fn look_for_cmd_chars(kyc: Option<char>, s: &mut String)
     } 
 }
 
-pub fn find_command_frequency(command: &String, hist: &HashMap<String, Vec<String>>, conn:&rusqlite::Connection) -> i32
-{
-    let history_data: Result<Vec<String>, rusqlite::Error> = db::get_full_history(conn);
-    let commands: Vec<String> = history_data.unwrap();
-    let count: usize = commands.iter().filter(|&c| c == command).count();
-    return count as i32;
-}

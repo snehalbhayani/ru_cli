@@ -55,7 +55,7 @@ pub fn into_raw_mode() -> termion::raw::RawTerminal<io::Stdout>{
     stdout
 }
 
-pub fn listen_key_strokes(buf: &mut String, hist: &mut HashMap<String, Vec<String>>, conn:&rusqlite::Connection) -> io::Result<()>
+pub fn listen_key_strokes(buf: &mut String, hist: &mut HashMap<String, Vec<String>>, conn:&rusqlite::Connection, mode:i32) -> io::Result<()>
 {
     // Capture every possible keyboard event. 
     // This is where, we listen to all possible events and decide what to do and when to do.
@@ -103,8 +103,8 @@ pub fn listen_key_strokes(buf: &mut String, hist: &mut HashMap<String, Vec<Strin
                 write!(stdout, "\n{}>> ", termion::cursor::Goto(1,cur_pos.1 + 1)).unwrap();
                 stdout.flush()?;
                 utilities::tokenize_and_index(buf, hist);
-                let frequency: i32 = utilities::find_command_frequency(buf, hist, conn) ;
-                db::insert_command(conn, buf, frequency);
+                // let frequency: i32 = utilities::find_command_frequency(buf, hist, conn) ;
+                db::insert_command(conn, buf, mode);
                 (*buf).clear();
                 write!(stdout, "{}", termion::clear::AfterCursor).unwrap();
                 stdout.flush()?;
